@@ -140,7 +140,6 @@ def count_values_above_mean(X):
 ######################################################################################
 
 
-
 def getXysets(train_set, test_set):
 
     #get X_train and y_train
@@ -178,7 +177,7 @@ def getXysets(train_set, test_set):
 
 
 
-
+# Oversampling strategy to handle unbalanced datasets
 def balanceSample(X_train,y_train):
     all_classes = np.unique(y_train)
     nclasses = len(all_classes)
@@ -347,22 +346,22 @@ def getAllCandidateAggFeats(X_train, y_train, agg_fns, repr_types,
     XT = np.empty((X_train.shape[0],1))
 
         
-    if 1 in repr_types:
+    if 1 in repr_types: # raw series
         candidate_agg_feats_timeOriginal,XT_ori= getCandidateAggFeats(X_train_norm,y_train,agg_fns,1,X_train)
         all_candidate_agg_feats.extend(candidate_agg_feats_timeOriginal[0:])
         XT = np.hstack((XT,XT_ori))
 
-    if 2 in repr_types:
+    if 2 in repr_types: # periodogram
         candidate_agg_feats_freqPeriodogram,XT_per = getCandidateAggFeats(per_X_train_norm,y_train,agg_fns,2,per_X_train)
         all_candidate_agg_feats.extend(candidate_agg_feats_freqPeriodogram[0:])
         XT = np.hstack((XT,XT_per))
     
-    if 3 in repr_types:
+    if 3 in repr_types: # derivative
         candidate_agg_feats_timeDerivative,XT_diff = getCandidateAggFeats(diff_X_train_norm,y_train,agg_fns,3,diff_X_train)
         all_candidate_agg_feats.extend(candidate_agg_feats_timeDerivative[0:])
         XT = np.hstack((XT,XT_diff))
 
-    if 4 in repr_types:
+    if 4 in repr_types: # autoregressive
         candidate_agg_feats_AR,XT_ar = getCandidateAggFeats(ar_X_train_norm,y_train,agg_fns,4,ar_X_train)
         all_candidate_agg_feats.extend(candidate_agg_feats_AR[0:])
         XT = np.hstack((XT,XT_ar))
@@ -389,7 +388,7 @@ def getIntervalFeature(sub_interval,agg_fn):
     else:
         return agg_fn(sub_interval,axis=1)
     
-    
+
 def getIntervalBasedTransform(X,per_X,diff_X,ar_X,candidate_agg_feats,relevant_candidate_agg_feats_id):
     nrows = X.shape[0]
     X_transform = np.zeros((nrows,len(candidate_agg_feats)))
@@ -455,3 +454,146 @@ def ar_coefs(X):
         coefs,_ = burg(X[i,:],order=lags)
         X_transform.append(coefs)
     return np.array(X_transform)
+
+
+
+
+########################## Additional functions used for interpretability ####################################
+
+#Returns the information (i.e., starting and ending indices, aggregation function and time series representation) from each relevant interval feature
+def get_lst_start_ending_indices(relevant_caf_idx_per_tree, all_candidate_agg_feats):
+    all_start_idx = []
+    all_end_idx = []
+    all_agg_fns = []
+    all_repr_types = []
+    
+    for relevant_caf_idx in relevant_caf_idx_per_tree:
+        
+        caf = np.array(all_candidate_agg_feats)[np.unique(relevant_caf_idx)]
+        
+        cur_start_idx = np.array(caf[:,2])
+        cur_end_idx = np.array(caf[:,3])
+        cur_agg_fns = np.array(caf[:,4])
+        cur_repr_type = np.array(caf[:,5])
+        all_start_idx.append(cur_start_idx.astype(int))
+        all_end_idx.append(cur_end_idx.astype(int))
+        all_agg_fns.append(cur_agg_fns)
+        all_repr_types.append(cur_repr_type.astype(int))
+    return all_start_idx,all_end_idx,all_agg_fns,all_repr_types
+
+
+#Returns the discriminatory starting and ending indices as found on each trained tree for the given time series representation repr_type and aggregation function agg_fn
+def get_all_start_end_idx_per_tree(t, agg_fn, repr_type, all_start_idx, all_end_idx, all_agg_fns, all_repr_types):
+    repr_type_idx = np.where(all_repr_types[t] == repr_type)[0]
+    all_agg_fn_to_use_by_repr_type = all_agg_fns[t][repr_type_idx]
+    all_start_idx_to_use_by_repr_type = all_start_idx[t][repr_type_idx]
+    all_end_idx_to_use_by_repr_type = all_end_idx[t][repr_type_idx]
+    agg_fn_idx = np.where(all_agg_fn_to_use_by_repr_type == agg_fn)[0]
+    all_start_idx_to_use_FINAL = all_start_idx_to_use_by_repr_type[agg_fn_idx]
+    all_end_idx_to_use_FINAL = all_end_idx_to_use_by_repr_type[agg_fn_idx]
+    return all_start_idx_to_use_FINAL,all_end_idx_to_use_FINAL
+
+
+
+#Returns the importance of each time series representation
+def getReprImportances(clf, all_candidate_agg_feats):
+    ori = []
+    per = []
+    der = []
+    reg = []
+    features_importances=clf.feature_importances_
+    cont = 0 
+    for candAggFeats in all_candidate_agg_feats:
+        if candAggFeats[5] == 1:
+            ori.append(features_importances[cont])
+        elif candAggFeats[5] == 2:
+            per.append(features_importances[cont])
+        elif candAggFeats[5] == 3:
+            der.append(features_importances[cont])
+        else: #candAggFeats[5] == 4:
+            reg.append(features_importances[cont])
+        
+        cont+=1
+    return np.mean(ori), np.mean(per), np.mean(der), np.mean(reg)
+            
+
+#Returns the importance of each aggregation function according to the relevant features extracted from the given time series representation _repr
+def getStatsImportances(clf, all_candidate_agg_feats, _repr):
+    #     agg_fns = [np.mean, np.std, np.polyfit, np.median, np.min, np.max, iqr, np.percentile, np.quantile]
+    
+    features_importances=clf.feature_importances_
+
+    _mean = []
+    _std = []
+    _slope = []
+    _median = []
+    _min = []
+    _max = []
+    _iqr = []
+    _cmc = []
+    _cam = []
+
+    cont = 0 
+    for candAggFeats in all_candidate_agg_feats:
+        if candAggFeats[5] == _repr:
+            if candAggFeats[4] == np.mean:
+                _mean.append(features_importances[cont])
+            elif candAggFeats[4] == np.std:
+                _std.append(features_importances[cont])
+            elif candAggFeats[4] == np.polyfit:
+                _slope.append(features_importances[cont])
+            elif candAggFeats[4] == np.median:
+                _median.append(features_importances[cont])
+            elif candAggFeats[4] == np.min:
+                _min.append(features_importances[cont])
+            elif candAggFeats[4] == np.max:
+                _max.append(features_importances[cont])
+            elif candAggFeats[4] == iqr:
+                _iqr.append(features_importances[cont])
+            elif candAggFeats[4] == np.percentile:
+                _cmc.append(features_importances[cont])
+            else: #candAggFeats[4] == np.quantile:
+                _cam.append(features_importances[cont])
+        
+        cont+=1
+    return np.mean(_mean), np.mean(_std), np.mean(_slope), np.mean(_median), np.mean(_min), np.mean(_max), np.mean(_iqr), np.mean(_cmc),np.mean(_cam)
+
+
+
+### Given a set of testing instances, and a matrix of all the predictions for each tree.
+### Return a set of "intensities" (the number of times each testing instance data value is intersected by the each of discriminatory interval features)
+
+#Considers all candidate discriminatory interval features (i.e., not only from trees reaching agreement)
+def candDiscrIntFeats_per_aggfn (X_test,y_test,all_trees_predict,all_start_idx,all_end_idx,all_agg_fns,all_repr_types, repr_type, agg_fn):
+    ntrees = len(all_trees_predict[0,:])
+    intensity_map = np.zeros(X_test.shape)
+
+    for i in range(1):#just need to this once..the same values apply for all the other instances
+        agreements_tree_idx = np.arange(0,ntrees)
+        for tree_idx in agreements_tree_idx:
+            all_start_idx_to_use,all_end_idx_to_use = get_all_start_end_idx_per_tree(tree_idx, agg_fn, repr_type, all_start_idx, all_end_idx, all_agg_fns, all_repr_types)
+            for j in range(len(all_start_idx_to_use)):
+                intensity_map[i,all_start_idx_to_use[j]:all_end_idx_to_use[j]] += 1
+    
+    for i in range(len(y_test)-1):
+        intensity_map[i+1,:] = intensity_map[0,:]
+    return intensity_map
+
+
+#Considers just the candidate discriminatory interval features from trees reaching agreement
+def rois_per_aggfn (X_test,y_test,all_trees_predict,all_start_idx,all_end_idx,all_agg_fns,all_repr_types, repr_type, agg_fn):
+    ntrees = len(all_trees_predict[0,:])
+    intensity_map = np.zeros(X_test.shape)
+    
+    for i in range(len(y_test)):
+        boolean_trees_agreement = all_trees_predict[i,:] == y_test[i]
+        agreements_tree_idx = np.where(boolean_trees_agreement == True)[0]
+
+        for tree_idx in agreements_tree_idx:
+            all_start_idx_to_use,all_end_idx_to_use = get_all_start_end_idx_per_tree(tree_idx, agg_fn, repr_type, all_start_idx, all_end_idx, all_agg_fns, all_repr_types)
+
+            for j in range(len(all_start_idx_to_use)):
+                intensity_map[i,all_start_idx_to_use[j]:all_end_idx_to_use[j]] += 1
+    return intensity_map
+
+
