@@ -1,6 +1,6 @@
 # Nestor Cabello, Elham Naghizade, Jianzhong Qi, Lars Kulik
-# Fast, accurate and explainable time series classification through randomization.
-# Data Min Know Disc (2023)
+
+# Cabello N, Naghizade E, Qi J, Kulik L (2021) Fast, Accurate and Interpretable Time Series Classification Through Randomization.
 
 
 import math
@@ -11,7 +11,6 @@ import pandas as pd
 import numpy as np
 
 from sklearn.ensemble import ExtraTreesClassifier
-from sklearn import preprocessing
 
 from scipy.io import arff
 from scipy.stats import iqr, zscore
@@ -28,7 +27,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 
-#################### aggregation functions - implementations #################################
+#################### aggregation functions - functions #################################
 
 @jit(nopython=True, fastmath=True)
 def fast_mean(X):
@@ -37,7 +36,6 @@ def fast_mean(X):
     for i in range(nrows):
         _X[i] = inner_mean(X[i,:])
     return _X
-
 
 @jit(nopython=True, fastmath=True)
 def inner_mean(X):
@@ -48,6 +46,7 @@ def inner_mean(X):
     return accum/ncols
 
 
+
 @jit(nopython=True, fastmath=True)
 def fast_std(X):
     nrows,_ = X.shape
@@ -55,7 +54,6 @@ def fast_std(X):
     for i in range(nrows):
         _X[i] = inner_std(X[i,:])
     return _X
-
 
 @jit(nopython=True, fastmath=True)
 def inner_std(X):
@@ -67,6 +65,7 @@ def inner_std(X):
     return (accum/ncols)**0.5
 
 
+
 @jit(nopython=True, fastmath=True)
 def fast_slope(Y):
     r,c = Y.shape
@@ -75,7 +74,6 @@ def fast_slope(Y):
     for i in range(r):
         _X[i] = inner_slope(Y[i,:],x)
     return _X
-
 
 @jit(nopython=True, fastmath=True)
 def inner_slope(X,indices):
@@ -92,6 +90,7 @@ def inner_slope(X,indices):
     return ( SUMx*SUMy - ncols*SUMxy ) / ( SUMx*SUMx - ncols*SUMxx )
 
 
+
 @jit(nopython=True, fastmath=True)
 def fast_iqr(X):
     nrows,_ = X.shape
@@ -99,7 +98,6 @@ def fast_iqr(X):
     for i in range(nrows):
         _X[i] = inner_iqr(X[i,:])
     return _X
-
 
 @jit(nopython=True, fastmath=True)
 def inner_iqr(a):
@@ -139,7 +137,7 @@ def count_values_above_mean(X):
 
 
 
-################################# Main functions used in r-STSF #####################################################
+######################################################################################
 
 
 def getXysets(train_set, test_set):
@@ -317,7 +315,7 @@ def supervisedSearch(X, y, ini_idx, agg_fn, repr_type, X_ori):
     
 def getCandidateAggFeats(X,y,agg_fns,repr_type,X_ori):
     candidate_agg_feats = []
-    XT = np.empty((X.shape[0],1), dtype='float32')
+    XT = np.empty((X.shape[0],1))
 
     for agg_fn in agg_fns:
         random_cut_point = random.randint(1,len(X[0])-1)
@@ -345,7 +343,7 @@ def getAllCandidateAggFeats(X_train, y_train, agg_fns, repr_types,
                             X_train_norm, per_X_train_norm, diff_X_train_norm, ar_X_train_norm):
     
     all_candidate_agg_feats = []
-    XT = np.empty((X_train.shape[0],1), dtype='float32')
+    XT = np.empty((X_train.shape[0],1))
 
         
     if 1 in repr_types: # raw series
@@ -393,7 +391,7 @@ def getIntervalFeature(sub_interval,agg_fn):
 
 def getIntervalBasedTransform(X,per_X,diff_X,ar_X,candidate_agg_feats,relevant_candidate_agg_feats_id):
     nrows = X.shape[0]
-    X_transform = np.zeros((nrows,len(candidate_agg_feats)), dtype=np.float32)
+    X_transform = np.zeros((nrows,len(candidate_agg_feats)))
 
     for j in relevant_candidate_agg_feats_id:
 
@@ -416,18 +414,10 @@ def getIntervalBasedTransform(X,per_X,diff_X,ar_X,candidate_agg_feats,relevant_c
     
 
 def getTrainTestSets(dset_name):
-    # path = "sampleUCRdatasets/" #replace with the path where the UCR datasets are located
-    path = "/Users/cabellon/Downloads/Univariate_arff/"
+    path = "sampleUCRdatasets/" #replace with the path where the UCR datasets are located
     train_set = path+dset_name+"/"+dset_name+"_TRAIN.arff"
     test_set = path+dset_name+"/"+dset_name+"_TEST.arff"
     X_train, y_train, X_test, y_test = getXysets(train_set, test_set)
-    
-    #force labels to start from 0 onwards
-    le = preprocessing.LabelEncoder()
-    le.fit(y_train)
-    y_train = le.transform(y_train)
-    y_test = le.transform(y_test)
-
     return  X_train, y_train, X_test, y_test
 
 
@@ -468,7 +458,7 @@ def ar_coefs(X):
 
 
 
-########################## Additional functions used for explainability ####################################
+########################## Additional functions used for interpretability ####################################
 
 #Returns the information (i.e., starting and ending indices, aggregation function and time series representation) from each relevant interval feature
 def get_lst_start_ending_indices(relevant_caf_idx_per_tree, all_candidate_agg_feats):
@@ -502,6 +492,71 @@ def get_all_start_end_idx_per_tree(t, agg_fn, repr_type, all_start_idx, all_end_
     all_start_idx_to_use_FINAL = all_start_idx_to_use_by_repr_type[agg_fn_idx]
     all_end_idx_to_use_FINAL = all_end_idx_to_use_by_repr_type[agg_fn_idx]
     return all_start_idx_to_use_FINAL,all_end_idx_to_use_FINAL
+
+
+
+#Returns the importance of each time series representation
+def getReprImportances(clf, all_candidate_agg_feats):
+    ori = []
+    per = []
+    der = []
+    reg = []
+    features_importances=clf.feature_importances_
+    cont = 0 
+    for candAggFeats in all_candidate_agg_feats:
+        if candAggFeats[5] == 1:
+            ori.append(features_importances[cont])
+        elif candAggFeats[5] == 2:
+            per.append(features_importances[cont])
+        elif candAggFeats[5] == 3:
+            der.append(features_importances[cont])
+        else: #candAggFeats[5] == 4:
+            reg.append(features_importances[cont])
+        
+        cont+=1
+    return np.mean(ori), np.mean(per), np.mean(der), np.mean(reg)
+            
+
+#Returns the importance of each aggregation function according to the relevant features extracted from the given time series representation _repr
+def getStatsImportances(clf, all_candidate_agg_feats, _repr):
+    #     agg_fns = [np.mean, np.std, np.polyfit, np.median, np.min, np.max, iqr, np.percentile, np.quantile]
+    
+    features_importances=clf.feature_importances_
+
+    _mean = []
+    _std = []
+    _slope = []
+    _median = []
+    _min = []
+    _max = []
+    _iqr = []
+    _cmc = []
+    _cam = []
+
+    cont = 0 
+    for candAggFeats in all_candidate_agg_feats:
+        if candAggFeats[5] == _repr:
+            if candAggFeats[4] == np.mean:
+                _mean.append(features_importances[cont])
+            elif candAggFeats[4] == np.std:
+                _std.append(features_importances[cont])
+            elif candAggFeats[4] == np.polyfit:
+                _slope.append(features_importances[cont])
+            elif candAggFeats[4] == np.median:
+                _median.append(features_importances[cont])
+            elif candAggFeats[4] == np.min:
+                _min.append(features_importances[cont])
+            elif candAggFeats[4] == np.max:
+                _max.append(features_importances[cont])
+            elif candAggFeats[4] == iqr:
+                _iqr.append(features_importances[cont])
+            elif candAggFeats[4] == np.percentile:
+                _cmc.append(features_importances[cont])
+            else: #candAggFeats[4] == np.quantile:
+                _cam.append(features_importances[cont])
+        
+        cont+=1
+    return np.mean(_mean), np.mean(_std), np.mean(_slope), np.mean(_median), np.mean(_min), np.mean(_max), np.mean(_iqr), np.mean(_cmc),np.mean(_cam)
 
 
 
@@ -540,167 +595,5 @@ def rois_per_aggfn (X_test,y_test,all_trees_predict,all_start_idx,all_end_idx,al
             for j in range(len(all_start_idx_to_use)):
                 intensity_map[i,all_start_idx_to_use[j]:all_end_idx_to_use[j]] += 1
     return intensity_map
-
-
-
-
-##################### Main class to initialize, train and test the r-STSF classifier #########################
-
-class rstsf():
-
-    def __init__(self, agg_fns=None, repr_types=None, d=None, r=None):
-        self.agg_fns = agg_fns if agg_fns is not None else [np.mean, np.std, np.polyfit, np.median, np.min, np.max, iqr, np.percentile, np.quantile]
-        self.repr_types = repr_types if repr_types is not None else [1, 2, 3, 4]
-        self.d = d if d is not None else 50 #number of sets of candidate discriminatory interval features (according to our experiments, setting d = 0.1*r provides a good trade-off between classification accuracy and running time)
-        self.r = r if r is not None else 500 #number of trees
-        self.extra_trees = None
-        self.all_candidate_agg_feats = []
-        self.relevant_caf_idx_per_tree = []
-        self.X_test_T = None
-
-
-    def fit(self, X_train_ori, y_train_ori):
-
-        #For cases of unbalanced datasets --> oversampling
-        X_train, per_X_train, diff_X_train, ar_X_train, y_train = dataAugmented(X_train_ori,y_train_ori)
-
-        
-        # For the extraction of candidate interval features we use the FisherScore feature ranking metric. 
-        # For such metric, all features must z-normalized.
-        X_train_norm = zscore(X_train, axis=0, ddof=1)
-        X_train_norm[np.isnan(X_train_norm)] = 0 # In case of Nan values set them to zero
-        per_X_train_norm = getPeriodogramRepr(X_train_norm)
-        diff_X_train_norm = np.diff(X_train_norm)
-
-        ar_X_train_norm = ar_coefs(X_train_norm)
-        ar_X_train_norm[np.isnan(ar_X_train_norm)] = 0 # In case of Nan values set them to zero
-
-        all_X_train_T = np.zeros((X_train.shape[0],1))
-
-        for t in range(self.d): # Compute d sets of candidate discriminatory interval features 
-            candidate_agg_feats,X_train_T = getAllCandidateAggFeats(X_train, y_train, self.agg_fns, self.repr_types, 
-                                                             per_X_train, diff_X_train, ar_X_train,
-                                                             X_train_norm, per_X_train_norm, diff_X_train_norm,
-                                                             ar_X_train_norm)
-            
-            # Merge each computed interval-based representation
-            all_X_train_T = np.hstack((all_X_train_T,X_train_T)) 
-            self.all_candidate_agg_feats.extend(candidate_agg_feats)
-
-            ##Uncomment if want to keep track of the progress percentage
-            # # Calculate progress percentage
-            # progress = (t + 1) / self.d * 100
-
-            # # Check if progress is a multiple of 10
-            # if progress % 10 == 0:
-            #     print(f"Progress: {progress}%")
-
-        
-        all_X_train_T = all_X_train_T[:,1:]
-
-        self.extra_trees = ExtraTreesClassifier(n_estimators=self.r,criterion='entropy',class_weight='balanced',max_features='sqrt')
-        self.extra_trees.fit(all_X_train_T, y_train) # Train the ensemble of ET classifiers
-
-
-    def predict(self, X_test):
-
-        per_X_test = getPeriodogramRepr(X_test)
-        diff_X_test = np.diff(X_test)
-        ar_X_test = ar_coefs(X_test)
-        ar_X_test[np.isnan(ar_X_test)] = 0
-
-        # The testing set has to be transformed into an interval-based representation
-        # use only the relevant interval as according to the training process (i.e., tree nodes)
-        relevant_caf_idx = [] 
-        for dt_tree in self.extra_trees.estimators_:
-            caf_idx_to_train = dt_tree.tree_.feature
-            self.relevant_caf_idx_per_tree.append(np.unique(caf_idx_to_train[caf_idx_to_train>=0])) #save the most discriminatory interval features on each tree
-            relevant_caf_idx.extend(caf_idx_to_train[caf_idx_to_train>=0])
-        relevant_caf_idx = np.unique(relevant_caf_idx)
-        
-        self.X_test_T = getIntervalBasedTransform(X_test, per_X_test, diff_X_test, ar_X_test, self.all_candidate_agg_feats, relevant_caf_idx)
-        y_pred = self.extra_trees.predict(self.X_test_T)
-
-        return y_pred
-    
-    # Get the matrix of predictions, of size number of testing instances X number of trees.
-    # For a given testing instance, each tree provides its predicted class label.
-    # To the best of our knowledge scikit-learn does not provide the matrix of predicitions. However, this could
-    # be easily adapted into this library to avoid unnecessary computations at testing time.
-    def get_predictions_matrix(self):
-
-        all_trees_predict = []
-        for tree in self.extra_trees.estimators_:
-            proba = tree.predict_proba(self.X_test_T)
-            cur_prediction = self.extra_trees.classes_.take(np.argmax(proba, axis=1), axis=0)
-            all_trees_predict.append(cur_prediction)
-        all_trees_predict = np.array(all_trees_predict)
-        all_trees_predict = all_trees_predict.transpose()
-
-        return all_trees_predict
-    
-    #Returns the importance of each time series representation
-    def get_repr_importances(self):
-        ori = []
-        per = []
-        der = []
-        reg = []
-        features_importances=self.extra_trees.feature_importances_
-        cont = 0 
-        for candAggFeats in self.all_candidate_agg_feats:
-            if candAggFeats[5] == 1:
-                ori.append(features_importances[cont])
-            elif candAggFeats[5] == 2:
-                per.append(features_importances[cont])
-            elif candAggFeats[5] == 3:
-                der.append(features_importances[cont])
-            else: #candAggFeats[5] == 4:
-                reg.append(features_importances[cont])
-            
-            cont+=1
-        return np.mean(ori), np.mean(per), np.mean(der), np.mean(reg)
-                
-
-    #Returns the importance of each aggregation function according to the relevant features extracted from the given time series representation _repr
-    def get_stats_importances(self, _repr):
-        #     agg_fns = [np.mean, np.std, np.polyfit, np.median, np.min, np.max, iqr, np.percentile, np.quantile]
-        
-        features_importances=self.extra_trees.feature_importances_
-
-        _mean = []
-        _std = []
-        _slope = []
-        _median = []
-        _min = []
-        _max = []
-        _iqr = []
-        _cmc = []
-        _cam = []
-
-        cont = 0 
-        for candAggFeats in self.all_candidate_agg_feats:
-            if candAggFeats[5] == _repr:
-                if candAggFeats[4] == np.mean:
-                    _mean.append(features_importances[cont])
-                elif candAggFeats[4] == np.std:
-                    _std.append(features_importances[cont])
-                elif candAggFeats[4] == np.polyfit:
-                    _slope.append(features_importances[cont])
-                elif candAggFeats[4] == np.median:
-                    _median.append(features_importances[cont])
-                elif candAggFeats[4] == np.min:
-                    _min.append(features_importances[cont])
-                elif candAggFeats[4] == np.max:
-                    _max.append(features_importances[cont])
-                elif candAggFeats[4] == iqr:
-                    _iqr.append(features_importances[cont])
-                elif candAggFeats[4] == np.percentile:
-                    _cmc.append(features_importances[cont])
-                else: #candAggFeats[4] == np.quantile:
-                    _cam.append(features_importances[cont])
-            
-            cont+=1
-        return np.mean(_mean), np.mean(_std), np.mean(_slope), np.mean(_median), np.mean(_min), np.mean(_max), np.mean(_iqr), np.mean(_cmc),np.mean(_cam)
-
 
 
