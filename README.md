@@ -7,7 +7,7 @@ Cabello, N., Naghizade, E., Qi, J. et al. Fast, accurate and explainable time se
 
 
 The arXiv version of r-STSF can be found in:
-Nestor Cabello, Elham Naghizade, Jianzhong Qi, and Lars Kulik. [Fast, Accurate and Interpretable Time Series Classification Through Randomization.](https://arxiv.org/abs/2105.14876) arXiv e-prints, [arXiv:2105.14876](https://arxiv.org/abs/2105.14876) (2021)
+Nestor Cabello, Elham Naghizade, Jianzhong Qi, and Lars Kulik. Fast, Accurate and Interpretable Time Series Classification Through Randomization. arXiv e-prints, [arXiv:2105.14876](https://arxiv.org/abs/2105.14876) (2021)
 
 The folder **history_arxiv** contains the results presented in the arXiv version of r-STSF.
 
